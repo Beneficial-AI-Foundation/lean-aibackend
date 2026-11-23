@@ -53,10 +53,56 @@ def defaultModel : String := "claude-opus-5-5"
 
 def defaultMaxTokens : Nat := 16000
 
+@[extern "claude_key_service"]
+private opaque keyServiceRaw : Unit → String
+
+@[extern "claude_key_helper"]
+private opaque keyHelperRaw : Unit → String
+
+/-- The name under which the secret store of the operating system holds the
+key. The definition `keyService` of `lakefile.lean` sets it. -/
+def keyService : String := keyServiceRaw ()
+
+/-- A key helper, as a command and its arguments. It prints the key on stdout. -/
+structure KeySource where
+  cmd : String
+  args : Array String := #[]
+deriving Repr, BEq
+
+namespace KeySource
+
+/-- The helper that the definition `keyHelper` of `lakefile.lean` sets, if any. -/
+def configured : Option KeySource :=
+  match (keyHelperRaw ()).splitOn "\n" |>.filter (· ≠ "") with
+  | [] => none
+  | cmd :: args => some { cmd, args := args.toArray }
+
+/-- The default helper of the operating system that runs the program.
+On macOS it reads the login Keychain through `/usr/bin/security`. On Windows
+there is none. On any other system it reads the Secret Service through
+`secret-tool`. -/
+def platformDefault (service : String := keyService) : Except String KeySource :=
+  if service.isEmpty then
+    .error "precondition violated: the key service name is empty"
+  else if System.Platform.isOSX then
+    .ok { cmd := "/usr/bin/security", args := #["find-generic-password", "-s", service, "-w"] }
+  else if System.Platform.isWindows then
+    .error "Windows has no default key helper. Set `keyHelper` in lakefile.lean."
+  else
+    .ok { cmd := "secret-tool", args := #["lookup", "service", service] }
+
+/-- The configured helper, or else the default of the operating system. -/
+def resolve : Except String KeySource :=
+  match configured with
+  | some s => .ok s
+  | none => platformDefault
+
+end KeySource
+
 namespace Client
 
 @[extern "claude_client_new"]
-opaque newRaw (url key : @& String) : IO Client
+opaque newRaw (url key caFile : @& String) : IO Client
 
 @[extern "claude_client_post"]
 opaque postRaw (c : @& Client) (body : @& String) : IO (UInt32 × UInt32 × String)
@@ -64,21 +110,33 @@ opaque postRaw (c : @& Client) (body : @& String) : IO (UInt32 × UInt32 × Stri
 def endpoint : String := "https://api.anthropic.com/v1/messages"
 
 /-- The Keychain service name under which `fromKeychain` looks up the key. -/
-def keychainService : String := "lean-aibackend-anthropic-api-key"
+def keychainService : String := keyService
 
-/-- Creates a client from an explicit API key. Prefer `fromKeychain` or
-`fromCommand`, which keep the key out of source files. -/
-def new (key : String) (url : String := endpoint) : IO Client := newRaw url key
+/-- Creates a client from an explicit API key. Prefer `fromDefault` or
+`fromCommand`, which keep the key out of source files.
+
+The key must be nonempty printable ASCII without spaces. The URL must have the
+`https` scheme, with no exception. A nonempty `caFile` names a PEM file of
+trusted certificates that replaces the system trust store, which the test
+suite uses for its local TLS server. The C shim checks each precondition
+again. -/
+def new (key : String) (url : String := endpoint) (caFile : String := "") : IO Client := do
+  ensure (!key.isEmpty) "the key is empty"
+  ensure (isPrintableAscii key) "the key holds a character other than printable ASCII"
+  ensure (url.startsWith "https://") "the URL does not have the https scheme"
+  newRaw url key caFile
+
+/-- The time limit of a key helper, in milliseconds. -/
+def keyHelperTimeoutMs : Nat := 60000
 
 /-- Creates a client whose key is the standard output of a secret store command,
 such as `security`, `secret-tool` or `pass`. The key travels through a pipe.
-It occurs in no argument list, environment variable or file. -/
+It occurs in no argument list, environment variable or file. The command must
+be nonempty, and it must finish within `keyHelperTimeoutMs`. -/
 def fromCommand (cmd : String) (args : Array String := #[]) (url : String := endpoint) :
     IO Client := do
-  let out ← IO.Process.output { cmd, args }
-  if out.exitCode != 0 then
-    throw (IO.userError s!"{cmd} exited with {out.exitCode}: {out.stderr}")
-  let key := out.stdout.trimAscii.toString
+  ensure (!cmd.isEmpty) "the key helper command is empty"
+  let key := (← runProcess cmd args none keyHelperTimeoutMs).trimAscii.toString
   if key.isEmpty then throw (IO.userError s!"{cmd} returned an empty key")
   new key url
 
@@ -86,11 +144,19 @@ def fromCommand (cmd : String) (args : Array String := #[]) (url : String := end
 Store the key once with
 `security add-generic-password -a "$USER" -s lean-aibackend-anthropic-api-key -w`,
 which prompts for the key without echoing it. -/
-def fromKeychain (service : String := keychainService) (url : String := endpoint) : IO Client :=
+def fromKeychain (service : String := keychainService) (url : String := endpoint) : IO Client := do
+  ensure (!service.isEmpty) "the Keychain service name is empty"
   fromCommand "/usr/bin/security" #["find-generic-password", "-s", service, "-w"] url
 
+/-- Creates a client on any operating system. The key comes from the helper
+that `KeySource.resolve` selects, which is the helper of `lakefile.lean` or
+else the secret store of the operating system. -/
+def fromDefault (url : String := endpoint) : IO Client := do
+  let s ← IO.ofExcept (KeySource.resolve.mapError IO.userError)
+  fromCommand s.cmd s.args url
+
 /-- Creates a client from the `ANTHROPIC_API_KEY` environment variable. The
-environment holds the key in the clear, so prefer `fromKeychain`. -/
+environment holds the key in the clear, so prefer `fromDefault`. -/
 def fromEnv : IO Client := do
   let some key ← IO.getEnv "ANTHROPIC_API_KEY"
     | throw (IO.userError "ANTHROPIC_API_KEY is not set")
@@ -134,25 +200,41 @@ def parseText (body : String) : Except String String :=
   (·.text) <$> parseReply body
 
 /-- Sends a conversation and returns the reply. Raises an `IO` error on a
-status other than 200 and on a refusal. -/
+status other than 200, on a refusal and on a reply that stops at `maxTokens`.
+The thinking of the model counts toward `maxTokens`, so a long reasoning can
+exhaust the limit before the visible text ends.
+
+The conversation must be nonempty. Every role must be `user` or `assistant`.
+The model name must be nonempty, and `maxTokens` must be positive. -/
 def send (c : Client) (messages : Array Message) (system : String := "")
     (model : String := defaultModel) (maxTokens : Nat := defaultMaxTokens) : IO Reply := do
+  ensure (!messages.isEmpty) "the conversation is empty"
+  ensure (messages.all fun m => m.role == "user" || m.role == "assistant")
+    "a message has a role other than user or assistant"
+  ensure (!model.isEmpty) "the model name is empty"
+  ensure (maxTokens > 0) "maxTokens is zero"
   let r ← c.post (buildChatRequest messages system model maxTokens)
   if r.status != 200 then
     throw (IO.userError s!"HTTP {r.status}: {r.body}")
   let reply ← IO.ofExcept (parseReply r.body)
   if reply.stopReason == "refusal" then
     throw (IO.userError "the model declined the request (stop_reason refusal)")
+  if reply.stopReason == "max_tokens" then
+    throw (IO.userError
+      s!"the reply is incomplete, since it reached the limit of {maxTokens} tokens (stop_reason max_tokens)")
   return reply
 
-/-- Sends one user message and returns the concatenated text blocks of the reply. -/
+/-- Sends one user message and returns the concatenated text blocks of the
+reply. The prompt must be nonempty. -/
 def ask (c : Client) (prompt : String) (model : String := defaultModel)
-    (maxTokens : Nat := defaultMaxTokens) : IO String :=
+    (maxTokens : Nat := defaultMaxTokens) : IO String := do
+  ensure (!prompt.isEmpty) "the prompt is empty"
   (·.text) <$> c.send #[.user prompt] "" model maxTokens
 
 /-- This client as a uniform `AIBackend.Backend`. -/
-def backend (c : Client) (model : String := defaultModel) : AIBackend.Backend :=
-  { name := "claude/api", ask := (c.ask · model) }
+def backend (c : Client) (model : String := defaultModel)
+    (maxTokens : Nat := defaultMaxTokens) : AIBackend.Backend :=
+  { name := "claude/api", ask := (c.ask · model maxTokens) }
 
 end Client
 end AIBackend.Claude.Api

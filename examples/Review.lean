@@ -7,7 +7,7 @@ backend proposes a Lean 4 formalization. The Claude CLI backend objects to the
 proposal or concedes. -/
 def main (args : List String) : IO Unit := do
   let text := args.headD "The sum of two even natural numbers is even."
-  let pro := (← Claude.Api.Client.fromKeychain).backend
+  let pro := (← Claude.Api.Client.fromDefault).backend
   let con := Claude.Cli.backend
   let proposal ← pro.ask <|
     "Formalize this text in Lean 4 without Mathlib. Reply with Lean 4 code only, " ++

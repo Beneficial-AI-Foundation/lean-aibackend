@@ -6,7 +6,7 @@ open AIBackend.Claude.Api
 client. Each request replays the earlier turns, so the model reads the whole
 conversation. -/
 def main : IO Unit := do
-  let c ← Client.fromKeychain
+  let c ← Client.fromDefault
   let system := "You are a concise tutor of the Lean 4 proof assistant. Answer in at most three sentences."
   let questions := #[
     "What is a structure in Lean 4?",

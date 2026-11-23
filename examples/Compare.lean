@@ -6,7 +6,7 @@ open AIBackend
 backend, behind the uniform `Backend` interface, and reports the time of each. -/
 def main (args : List String) : IO Unit := do
   let prompt := args.headD "Name the axioms that Lean 4 treats as standard. Answer in one line."
-  let api ← Claude.Api.Client.fromKeychain
+  let api ← Claude.Api.Client.fromDefault
   let backends : List Backend := [api.backend, Claude.Cli.backend]
   for b in backends do
     let t0 ← IO.monoMsNow
