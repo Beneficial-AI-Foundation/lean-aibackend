@@ -32,6 +32,26 @@ lake build          # builds the library and the demo `callclaude`
 lake test           # runs the test suite, no key needed
 ```
 
+Run the three commands in this order.
+
+The command `lake run check` reports every missing tool at once, by name. It
+is a convenience and not a condition of the other two commands. The build and
+the tests check the tools that they need, and each stops with the same report.
+The section "Environment checks" lists what each command checks.
+
+A report means that a tool is missing. The table gives the remedy on macOS.
+
+| Reported tool | Remedy on macOS |
+| --- | --- |
+| A C compiler, or `python3` with the `ssl` module | The command `xcode-select --install`, which installs the Command Line Tools for Xcode. They also hold the libcurl headers |
+| libcurl through `curl-config`, `openssl`, or the Keychain command | These are part of macOS. A report for one of them points to a changed `PATH` |
+| The `claude` CLI | The installation of Claude Code, followed by a login |
+
+Only `lake run check` asks for the `claude` CLI. A machine without it gets a
+report from the check, and it still builds the package and passes the test
+suite. The CLI serves the `Claude.Cli` backend and the examples `compare`,
+`review` and `clidemo`.
+
 Then store the API key once, as the section "API key" describes. The command
 `./.lake/build/bin/callclaude` confirms the installation with a live request.
 
