@@ -3,9 +3,10 @@
 A Lean 4 package that reaches AI assistants behind one interface. Backends are
 organized by tool, then by access method.
 
-**Platforms.** The package is tested on macOS only. Linux and Windows are not
-tested yet. The Linux path exists in the code and has never run. Windows has no
-default key helper.
+**Platforms.** The package works on macOS. Linux and Windows are work in
+progress. On Linux the build fails at the link step today, since the linker
+that Lean bundles does not find the system libcurl. Windows has no default key
+helper.
 
 The repository is `lean-aibackend`, the Lake package is `aibackend`, and the
 library to import is `AIBackend`.
@@ -38,9 +39,9 @@ Once `lake run check` reports no missing tool, the definition
 `environmentChecks` in `lakefile.lean` may become `false`. The build and the
 tests then skip the checks of the tools.
 
-Linux and Windows are not tested yet. On Linux the build needs the development
-files of libcurl, and the key helper is `secret-tool`. Windows has no default
-key helper, so it needs `keyHelper` in `lakefile.lean`.
+Linux and Windows are work in progress. On Linux the build needs the
+development files of libcurl, and the key helper is `secret-tool`. Windows has
+no default key helper, so it needs `keyHelper` in `lakefile.lean`.
 
 ## Interface
 

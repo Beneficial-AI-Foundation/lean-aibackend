@@ -27,10 +27,10 @@ jobs:
           lake build callclaude clidemo ask chat formalize compare review tests
           lake test
 
-  # Linux is not a tested platform yet. This job reports the state of the
-  # Linux build without failing the workflow.
+  # Linux is work in progress. This job reports the state of the Linux build
+  # without failing the workflow.
   linux:
-    name: Linux (not yet supported)
+    name: Linux (work in progress)
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
