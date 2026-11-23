@@ -19,6 +19,13 @@ jobs:
         run: lake build callclaude clidemo ask chat formalize compare review tests
       - name: Test
         run: lake test
+      # The file lean-toolchain names the lowest supported toolchain. This
+      # step repeats the build and the tests under the newest one.
+      - name: Build and test under the newest supported toolchain
+        run: |
+          echo "leanprover/lean4:v4.36.0" > lean-toolchain
+          lake build callclaude clidemo ask chat formalize compare review tests
+          lake test
 
   # Linux is not a tested platform yet. This job reports the state of the
   # Linux build without failing the workflow.

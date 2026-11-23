@@ -73,6 +73,9 @@ def tlsCases (failures : Failures) (key : String) : IO Unit := do
     | .ok st => check failures s!"tls/rejects-{name}" false s!"status={st}"
     | .error e => check failures s!"tls/rejects-{name}" (isTlsError e) e
 
+-- The body of `main` is one long `do` block, which exceeds the default depth
+-- under the oldest supported toolchain.
+set_option maxRecDepth 8192 in
 def main : IO Unit := do
   let key := "test-key-" ++ toString (← IO.monoNanosNow)
   -- Generate a certificate for 127.0.0.1, valid for two days. The mock server
