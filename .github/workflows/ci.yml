@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  macos:
+    name: macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install elan
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Build
+        run: lake build callclaude clidemo ask chat formalize compare review tests
+      - name: Test
+        run: lake test
+
+  # Linux is not a tested platform yet. This job reports the state of the
+  # Linux build without failing the workflow.
+  linux:
+    name: Linux (not yet supported)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the libcurl headers
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+      - name: Install elan
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Build
+        run: lake build callclaude clidemo ask chat formalize compare review tests
+      - name: Test
+        run: lake test

@@ -2,7 +2,7 @@ import AIBackend
 
 open AIBackend.Claude.Api
 
-/-- The two parts of the artifact of section 6 of the BAIF draft. -/
+/-- The two parts of the text. The second part depends on the first. -/
 def parts : Array String := #[
   "A natural number n is even if n = 2k for some natural number k.",
   "The sum of two even natural numbers is even."]
