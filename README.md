@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/banner.svg" alt="lean-aibackend, a project of the Beneficial AI Foundation" width="720">
+</p>
+
 # aibackend
 
 A Lean 4 package that reaches AI assistants behind one interface. Backends are
@@ -344,6 +348,15 @@ OK
   without failing the workflow.
 - `Client.send` raises an `IO` error when the response has `stop_reason` `refusal`
   or `max_tokens`.
+
+## Logo
+
+The directory `assets` holds the logo. The file `banner.svg` shows the mark
+with the name and the logo of the Beneficial AI Foundation, on a dark ground.
+The files `logo.svg` and `logo-dark.svg` hold the mark alone, for a light and
+for a dark ground. The green is `#15C639`, the green of the foundation's logo.
+The text of the banner uses the typeface Manrope where the viewer has it, and
+a system sans serif otherwise.
 
 ## License
 
