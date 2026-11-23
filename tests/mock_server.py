@@ -1,18 +1,25 @@
 """Mock of the Anthropic Messages API for the ClaudeFFI tests.
 
-Usage: python3 -I mock_server.py <expected-api-key>
+Usage: python3 -I mock_server.py <expected-api-key> <certificate.pem> <private-key.pem>
 The server binds 127.0.0.1 on a free port and prints the port on stdout.
+It speaks HTTPS only, with TLS 1.2 or later.
 The request's "model" field selects the behaviour:
   echo-utf8 / echo-ascii  return the first message's content as one text block
   status-NNN              return HTTP status NNN with a JSON error body
   blocks                  return the request's "blocks" field as the content array
   big-N                   return a text block of N copies of "x"
+  refuse                  return an empty content with stop_reason "refusal"
+  truncated               return the text "partial" with stop_reason "max_tokens"
+  slow-MS                 wait MS milliseconds, then return "slow"
 Every 200 response carries "conn", a per-connection serial number.
+
 """
 import http.server
 import itertools
 import json
+import ssl
 import sys
+import time
 
 EXPECTED_KEY = sys.argv[1]
 _conn_ids = itertools.count(1)
@@ -61,9 +68,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
             n = int(model[len("big-"):])
             return self.send_json(200, {"content": [{"type": "text", "text": "x" * n}],
                                         "conn": self.conn_id})
+        if model == "truncated":
+            return self.send_json(200, {"content": [{"type": "text", "text": "partial"}],
+                                        "stop_reason": "max_tokens", "conn": self.conn_id})
+        if model == "refuse":
+            return self.send_json(200, {"content": [], "stop_reason": "refusal",
+                                        "conn": self.conn_id})
+        if model.startswith("slow-"):
+            time.sleep(int(model[len("slow-"):]) / 1000)
+            return self.send_json(200, {"content": [{"type": "text", "text": "slow"}],
+                                        "stop_reason": "end_turn", "conn": self.conn_id})
         return self.send_json(400, {"type": "error", "error": {"type": "unknown_model"}})
 
 
+context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+context.minimum_version = ssl.TLSVersion.TLSv1_2
+context.load_cert_chain(sys.argv[2], sys.argv[3])
 server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+server.socket = context.wrap_socket(server.socket, server_side=True)
 print(server.server_address[1], flush=True)
 server.serve_forever()

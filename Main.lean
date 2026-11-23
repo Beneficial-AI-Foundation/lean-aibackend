@@ -4,7 +4,7 @@ open AIBackend
 
 /-- Sends a few requests on one Claude API client and reports connection reuse. -/
 def main (args : List String) : IO Unit := do
-  let c ← Claude.Api.Client.fromKeychain
+  let c ← Claude.Api.Client.fromDefault
   let prompt := args.headD "Reply with the single word OK."
   for i in [1:4] do
     let t0 ← IO.monoMsNow

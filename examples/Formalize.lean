@@ -15,7 +15,7 @@ def system : String :=
 /-- Formalizes each part in Lean 4 through the Claude API. Each request carries
 the formalizations of the earlier parts as context. -/
 def main : IO Unit := do
-  let c ← Client.fromKeychain
+  let c ← Client.fromDefault
   let mut context := ""
   for h : i in [0:parts.size] do
     let prompt :=
