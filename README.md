@@ -3,6 +3,14 @@
 A Lean 4 package that reaches AI assistants behind one interface. Backends are
 organized by tool, then by access method.
 
+**Platforms.** The package works on macOS. Linux and Windows are work in
+progress. On Linux the build fails at the link step today, since the linker
+that Lean bundles does not find the system libcurl. Windows has no default key
+helper.
+
+The repository is `lean-aibackend`, the Lake package is `aibackend`, and the
+library to import is `AIBackend`.
+
 ## Installation
 
 The package needs the following tools.
@@ -31,7 +39,8 @@ Once `lake run check` reports no missing tool, the definition
 `environmentChecks` in `lakefile.lean` may become `false`. The build and the
 tests then skip the checks of the tools.
 
-The installation ran on macOS only. The Linux path has not run. Windows has
+Linux and Windows are work in progress. On Linux the build needs the
+development files of libcurl, and the key helper is `secret-tool`. Windows has
 no default key helper, so it needs `keyHelper` in `lakefile.lean`.
 
 ## Interface
@@ -45,7 +54,7 @@ backend exposes one, so a caller picks a tool without knowing the transport.
 | --- | --- | --- | --- |
 | Claude | HTTP API, libcurl FFI, persistent handle | `AIBackend.Claude.Api` | yes, from a secret store |
 | Claude | `claude -p` subprocess, prompt on stdin | `AIBackend.Claude.Cli` | no |
-| Codex | `codex exec` subprocess | `AIBackend.Codex.Cli` | no |
+| Codex | `codex exec -` subprocess, prompt on stdin | `AIBackend.Codex.Cli` | no |
 | Gemini | `gemini -p` subprocess | `AIBackend.Gemini.Cli` | no |
 
 The CLI backends carry the tool's own authentication, so they need no API key.
@@ -163,8 +172,23 @@ lean_exe myapp where
   moreLinkArgs := curlLinkArgs
 ```
 
-A dependent project with a path requirement and these link arguments built and
-ran on macOS. The form with `git` has not run.
+A dependent project with this requirement and these link arguments built and
+ran on macOS, under the toolchains v4.28.0, v4.35.0 and v4.36.0.
+
+The file `lean-toolchain` of this package names v4.28.0, the lowest toolchain
+on which the package is tested. Lake raises the toolchain of a dependent
+project when a dependency names a newer one, so a low version here leaves a
+dependent project on its own toolchain. For a project on a toolchain older
+than v4.28.0, the command `lake update aibackend --keep-toolchain` prevents
+the change.
+
+### Executables only for the API backend
+
+The API backend works in a compiled executable. It does not work in the
+interpreter, which runs `#eval`, commands and tactics. A call of
+`Client.new` there ends the Lean process with the message "Could not find
+native implementation of external declaration". The CLI backends work in the
+interpreter, since they start a subprocess and use no native code.
 
 ## Confidentiality of the key, the query and the reply
 
@@ -195,8 +219,10 @@ start the binary when a base URL variable, such as `ANTHROPIC_BASE_URL`, lacks
 the `https` scheme, or when `NODE_TLS_REJECT_UNAUTHORIZED` is `0`. The check
 does not read the settings files of the CLI.
 
-The `Codex.Cli` and `Gemini.Cli` backends still pass the prompt as an
-argument, which the process table exposes to other local users.
+The `Codex.Cli` backend also passes the prompt on stdin. The `Gemini.Cli`
+backend still passes the prompt as an argument, which the process table
+exposes to other local users. Neither of these two backends has run from end
+to end, since neither CLI was logged in on the test machine.
 
 ## Preconditions
 
@@ -211,6 +237,7 @@ stay active in every build.
 | `Client.send` | The conversation is nonempty. Every role is `user` or `assistant`. The model name is nonempty. The value of `maxTokens` is positive. |
 | `Client.ask`, `Claude.Cli.ask` | The prompt is nonempty. |
 | `Claude.Cli.ask` | The model name does not start with `-`. The environment passes `checkTransport`. |
+| `Codex.Cli.ask`, `Gemini.Cli.ask` | The prompt is nonempty. The model name does not start with `-`. For Gemini the prompt does not start with `-` either. |
 | `runProcess` | The command is nonempty. No argument holds a NUL character. The time limit is positive. |
 | `claude_client_post` in the shim | The client holds a live handle. No other transfer runs on the client. The body is nonempty and holds no NUL byte. |
 
@@ -289,6 +316,15 @@ OK
 - A subprocess of a CLI backend has a time limit of 10 minutes, and a key helper has one of
   60 seconds. At the limit the helper ends the process group and raises an `IO` error.
 - Requests name the model `claude-opus-5-5` by default. They opt into the
-  server-side refusal fallback with `fallbacks: "default"`.
+  server-side refusal fallback with `fallbacks: "default"`. The fallback is a
+  beta feature of the API, which the header
+  `anthropic-beta: server-side-fallback-2026-07-01` selects, so it may change.
+- The workflow `.github/workflows/ci.yml` builds every executable and runs the
+  test suite on macOS. Its Linux job reports the state of the Linux build
+  without failing the workflow.
 - `Client.send` raises an `IO` error when the response has `stop_reason` `refusal`
   or `max_tokens`.
+
+## License
+
+The package is under the MIT license. See the file `LICENSE`.

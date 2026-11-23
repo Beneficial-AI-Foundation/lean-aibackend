@@ -73,6 +73,9 @@ def tlsCases (failures : Failures) (key : String) : IO Unit := do
     | .ok st => check failures s!"tls/rejects-{name}" false s!"status={st}"
     | .error e => check failures s!"tls/rejects-{name}" (isTlsError e) e
 
+-- The body of `main` is one long `do` block, which exceeds the default depth
+-- under the oldest supported toolchain.
+set_option maxRecDepth 8192 in
 def main : IO Unit := do
   let key := "test-key-" ++ toString (← IO.monoNanosNow)
   -- Generate a certificate for 127.0.0.1, valid for two days. The mock server
@@ -154,6 +157,11 @@ def main : IO Unit := do
       (toString ((← IO.monoMsNow) - started))
     check failures "pre/cli-empty-prompt" (← raises (AIBackend.Claude.Cli.ask ""))
     check failures "pre/cli-model-dash" (← raises (AIBackend.Claude.Cli.ask "x" "--help"))
+    check failures "pre/codex-empty-prompt" (← raises (AIBackend.Codex.Cli.ask ""))
+    check failures "pre/codex-model-dash" (← raises (AIBackend.Codex.Cli.ask "x" "--help"))
+    check failures "pre/gemini-empty-prompt" (← raises (AIBackend.Gemini.Cli.ask ""))
+    check failures "pre/gemini-prompt-dash" (← raises (AIBackend.Gemini.Cli.ask "--help"))
+    check failures "pre/gemini-model-dash" (← raises (AIBackend.Gemini.Cli.ask "x" "--help"))
 
     -- 1e. The transport check of the Claude CLI backend.
     let violation := AIBackend.Claude.Cli.transportViolation
