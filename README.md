@@ -20,6 +20,8 @@ library to import is `AIBackend`.
 
 ## Installation
 
+**The package works on macOS only.** Linux and Windows are work in progress.
+
 The package needs the following tools.
 
 | Tool | Needed for |
@@ -30,6 +32,9 @@ The package needs the following tools.
 | The `claude` CLI, already logged in | the `Claude.Cli` backend |
 | `python3` with the `ssl` module, and `openssl` | the test suite |
 | `security` on macOS, or `secret-tool` on Linux | the key of the `Claude.Api` backend |
+
+The command `curl-config --version` prints the version of libcurl. Ubuntu
+22.04 ships libcurl 7.81.0, so `lake test` stops at the libcurl check there.
 
 Run the following commands from the package directory.
 
