@@ -7,6 +7,9 @@
 A Lean 4 package that reaches AI assistants behind one interface. Backends are
 organized by tool, then by access method.
 
+The page of the package on Veriapps is
+https://veriapps.org/apps/lean-aibackend.
+
 **Platforms.** The package works on macOS. Linux and Windows are work in
 progress. On Linux the build fails at the link step today, since the linker
 that Lean bundles does not find the system libcurl. Windows has no default key
