@@ -2,46 +2,66 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   macos:
-    name: macOS
-    runs-on: macos-latest
+    # The package works on macOS (Apple silicon). Linux and Windows are work in
+    # progress: on Linux the build fails at the link step because Lean's bundled
+    # linker does not search the system libcurl, and Windows has no default key
+    # helper. macos-14 is the supported target.
+    name: build + test (macos-arm64)
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-      - name: Install elan
-        run: |
-          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
-          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
-      - name: Build
-        run: lake build callclaude clidemo ask chat formalize compare review tests
+
+      # elan + the toolchain pinned in lean-toolchain, with the .lake cache.
+      - name: Build the library, the callclaude binary and the examples
+        uses: leanprover/lean-action@v1
+        with:
+          auto-config: false
+          build: true
+          build-args: "callclaude clidemo ask chat formalize compare review tests"
+          use-github-cache: true
+
+      # The test runner starts tests/mock_server.py and runs its cases; it needs
+      # no API key and spends no tokens.
       - name: Test
         run: lake test
-      # The file lean-toolchain names the lowest supported toolchain. This
-      # step repeats the build and the tests under the newest one.
+
+      # lean-toolchain names the lowest supported toolchain. This step repeats
+      # the build and the tests under the newest supported one.
       - name: Build and test under the newest supported toolchain
         run: |
           echo "leanprover/lean4:v4.36.0" > lean-toolchain
           lake build callclaude clidemo ask chat formalize compare review tests
           lake test
 
-  # Linux is work in progress. This job reports the state of the Linux build
-  # without failing the workflow.
   linux:
-    name: Linux (work in progress)
+    # Linux is work in progress; the build fails at the link step today because
+    # Lean's bundled linker does not find the system libcurl. This job reports
+    # the state of the Linux build without failing the workflow.
+    name: build + test (linux-x86_64, work in progress)
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
-      - name: Install the libcurl headers
+
+      - name: Install the libcurl development headers
         run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
-      - name: Install elan
-        run: |
-          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
-          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
-      - name: Build
-        run: lake build callclaude clidemo ask chat formalize compare review tests
+
+      - name: Build the library, the callclaude binary and the examples
+        uses: leanprover/lean-action@v1
+        with:
+          auto-config: false
+          build: true
+          build-args: "callclaude clidemo ask chat formalize compare review tests"
+          use-github-cache: true
+
       - name: Test
         run: lake test
